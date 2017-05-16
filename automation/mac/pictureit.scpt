@@ -32,7 +32,7 @@ tell application "Google Chrome"
 		delay (random number from 0.335 to 1.534)
 	end repeat
 end tell
-do shell script "/usr/bin/click -x 0 -y 0"
+do shell script "/usr/local/bin/click -x 0 -y 0"
 set fileName to do shell script "date \"+Screen Shot  %Y-%m-%d at %H.%M.%S.png\""
 tell application "System Events" to set thePath to POSIX path of desktop folder
 do shell script "screencapture  -o -R0,0,1200,1400 -x -T 1 " & "\"" & thePath & "/" & fileName & "\""
