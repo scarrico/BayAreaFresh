@@ -1,0 +1,27 @@
+#!/usr/bin/osascript
+#
+# Open a Chrome window of a given height and width at 0,0
+# Usage:
+#   window.scrpt [url of location]
+#
+# Inputs:
+#    command line parameter: html address (url) for location to open
+#
+#
+#
+
+on run argv
+   set screenWidth to 1200
+   set screenHeight to 1440
+
+   tell application "Google Chrome"
+      activate
+      set w to make new window with properties {bounds:{0, 0, screenWidth, screenHeight}}
+      delay (random number from 0.2304 to 2.8472)
+      if (count of argv) > 0 then
+            open location item 1
+      else
+            return("Missing url to open, Just opening window")
+      end if
+   end tell
+end run
