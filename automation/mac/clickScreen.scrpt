@@ -1,0 +1,52 @@
+#!/usr/bin/osascript
+#
+# Click on an opened Chrome window at location x,y
+# Usage:
+#   clickScreen.scrpt x y
+#
+# Inputs:
+#    command line parameter: x y location of click
+#    
+
+on theSplit(theString, theDelimiter)
+      -- save delimiters to restore old settings
+      set oldDelimiters to AppleScript's text item delimiters
+      -- set delimiters to delimiter to be used
+      set AppleScript's text item delimiters to theDelimiter
+      -- create the array
+      set theArray to every text item of theString
+      -- restore the old setting
+      set AppleScript's text item delimiters to oldDelimiters
+      -- return the result
+      return theArray
+end theSplit
+
+on run argv
+   tell application "Google Chrome"
+      activate
+      if (count of argv) > 0 then
+            # Awkward way to handle calls from python
+            # Somehow all parameters come in as item 1
+            # We must split item 1, but split wont work on item 1
+            # directly, so we save to p, then split to myparams :(
+            set p to item 1 of argv as string
+            set myparams to my theSplit(p, " ")
+            # End awkward
+            #
+            # Now we can check that we got the right number of parameters
+            # We wont check that the parameters are an integer
+            if (count of myparams) = 2 then
+               set x  to item 1 of myparams as string
+               set y  to item 2 of myparams as string
+               set cmd to "/usr/local/bin/click -x "&x&" -y "&y
+               do shell script cmd
+               return(cmd)
+            else
+               return ("Missing two space separated integer coordinates")
+            end if
+            return(cmd)
+      else
+            return("Missing x,y parameters")
+      end if
+   end tell
+end run
