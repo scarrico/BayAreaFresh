@@ -2,26 +2,49 @@
 #
 # Open a Chrome window of a given height and width at 0,0
 # Usage:
-#   window.scrpt [url of location]
+#   window.scrpt [url of location] [width height]
 #
-# Inputs:
-#    command line parameter: html address (url) for location to open
-#
-#
-#
+# 
+
+on theSplit(theString, theDelimiter)
+      -- save delimiters to restore old settings
+      set oldDelimiters to AppleScript's text item delimiters
+      -- set delimiters to delimiter to be used 
+      set AppleScript's text item delimiters to theDelimiter
+      -- create the array
+      set theArray to every text item of theString
+      -- restore the old setting
+      set AppleScript's text item delimiters to oldDelimiters
+      -- return the result
+      return theArray
+end theSplit
 
 on run argv
-   set screenWidth to 1200
-   set screenHeight to 1440
-
+   set screenWidth to 680
+   set screenHeight to 1020
+            
    tell application "Google Chrome"
       activate
-      set w to make new window with properties {bounds:{0, 0, screenWidth, screenHeight}}
-      delay (random number from 0.2304 to 2.8472)
       if (count of argv) > 0 then
-            open location item 1
-      else
-            return("Missing url to open, Just opening window")
+            # Awkward way to handle calls from python
+            # Somehow all parameters come in as item 1
+            # We must split item 1, but split wont work on item 1
+            # directly, so we save to p, then split to myparams :(
+            set p to item 1 of argv as string
+            set myparams to my theSplit(p, " ")
+            # End awkward
+            #
+            set targeturl to item 1 of myparams as string # don't use url as a variable
+            if (count of myparams) = 3 then
+                  set screenWidth to item 2 of  myparams as string
+                  set screenHeight to item 3 of  myparams as string
+            end if
+            set w to make new window with properties {bounds:{0, 0, screenWidth, screenHeight}}
+            open location targeturl
+            return(targeturl)
+      else  
+         set w to make new window with properties {bounds:{0, 0, screenWidth, screenHeight}}
+         return("Missing url to open, Just opening window")
       end if
-   end tell
-end run
+   end tell    
+end run   
