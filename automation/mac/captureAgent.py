@@ -43,6 +43,9 @@ class captureAgent (ABC):
         self.clickCmd = self.dirHelpers+"clickScreen.scrpt"
         self.snapshotCmd = self.dirHelpers+"screenshot.scrpt"
         self.activateCmd = self.dirHelpers+"activate.scrpt"
+
+        self.randomWaitSecondsLow
+        self.randomWaitSecondsHigh
         '''
 
     def makeRandomWait(self, lowest, highest):
@@ -72,12 +75,13 @@ class captureAgent (ABC):
 
     def navigateToLocation(self, navLocationList):
         for click in navLocationList:
-            self.makeRandomWait(7, 16)
             xClick = click[self.x]+randint(0, 5)
             yClick = click[self.y]+randint(0, 5)
             argvalue = str(xClick) + " " + str(yClick)
             print(self.clickCmd, argvalue)
             check_call([self.clickCmd, argvalue])
+            self.makeRandomWait(self.randomWaitSecondsLow,
+                                self.randomWaitSecondsHigh)
 
     def createSnapshot(self, dirName, filePrefix):
         '''
@@ -89,7 +93,6 @@ class captureAgent (ABC):
         argvalue += str(self.ArrayBottomRightCap[0]) + " " + \
             str(self.ArrayBottomRightCap[1])
         check_call([self.snapshotCmd, argvalue])
-
     def getSingleSnapshot(self, dirName, filePrefix):
         '''
         For debugging and one off runs.
@@ -107,16 +110,18 @@ class captureAgent (ABC):
             str(self.ArrayBottomRightCap[1])
         self.createSnapshot(dirName, filePrefix)
 
-    def getAllSnapshots(self):
+    def getAllSnapshots(self, timePeriods, dir4data, filePrefixes):
         '''
         Get to the right spot in the browser
         Snapshot relevant part of screen to dir, filename
             ./% getAllSnapshots
         '''
+        print(timePeriods)
+        print(dir4data)
+        print(filePrefixes)
         for navList, dirName, filePrefix in \
-                zip(self.getTimePeriods,
-                    self.dirTimePeriods, self.filePrefixes):
+                zip(timePeriods,
+                    dir4data, filePrefixes):
                 print(navList, dirName, filePrefix)
                 self.navigateToLocation(navList)
                 self.createSnapshot(dirName, filePrefix)
-
