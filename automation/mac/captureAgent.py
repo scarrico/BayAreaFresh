@@ -4,6 +4,7 @@ from subprocess import check_call
 from random import randint
 from time import sleep
 from abc import ABC
+from os import makedirs
 
 
 class captureAgent (ABC):
@@ -87,12 +88,16 @@ class captureAgent (ABC):
         '''
         Create the snapshot
         '''
-        argvalue = self.dirArrays+dirName + " " + filePrefix + " "
+        path = self.dirArrays+dirName
+        argvalue = path + " " + filePrefix + " "
         argvalue += str(self.ArrayTopLeftCap[0]) + " " + \
             str(self.ArrayTopLeftCap[1]) + " "
-        argvalue += str(self.ArrayBottomRightCap[0]) + " " + \
-            str(self.ArrayBottomRightCap[1])
+        argvalue += str(self.BottomRightCap[0]) + " " + \
+            str(self.BottomRightCap[1])
+        # Possible race condition here.  OK for this application.
+        makedirs(path, exist_ok=True)
         check_call([self.snapshotCmd, argvalue])
+
     def getSingleSnapshot(self, dirName, filePrefix):
         '''
         For debugging and one off runs.
@@ -106,11 +111,12 @@ class captureAgent (ABC):
         argvalue = self.dirArrays+dirName + " " + filePrefix + " "
         argvalue += str(self.ArrayTopLeftCap[0]) + " " + \
             str(self.ArrayTopLeftCap[1]) + " "
-        argvalue += str(self.ArrayBottomRightCap[0]) + " " + \
-            str(self.ArrayBottomRightCap[1])
+        argvalue += str(self.BottomRightCap[0]) + " " + \
+            str(self.BottomRightCap[1])
         self.createSnapshot(dirName, filePrefix)
 
-    def getAllSnapshots(self, timePeriods, dir4data, filePrefixes):
+    def getAllSnapshots(self, timePeriods, dir4data,
+                        filePrefixes, lowerRightCoordlist):
         '''
         Get to the right spot in the browser
         Snapshot relevant part of screen to dir, filename
@@ -119,9 +125,11 @@ class captureAgent (ABC):
         print(timePeriods)
         print(dir4data)
         print(filePrefixes)
-        for navList, dirName, filePrefix in \
+        for navList, dirName, filePrefix, lowerRightCoord in \
                 zip(timePeriods,
-                    dir4data, filePrefixes):
+                    dir4data, filePrefixes, lowerRightCoordlist):
                 print(navList, dirName, filePrefix)
+                self.BottomRightCap = lowerRightCoord
                 self.navigateToLocation(navList)
                 self.createSnapshot(dirName, filePrefix)
+
