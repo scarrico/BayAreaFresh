@@ -1,6 +1,6 @@
-Simple image processing code that allows multiple cheap usb cameras to take pictures sequetially.  
-Useful for timelapse movies, monitoring plants growing, and other changes that occur slowly.
-Recommend calling from cron.
-Uses openCV c++ library, xcode, cmake and make.  
-
-This code needs updating for the latest versions of MacOSX. 
+capture.cpp & timelapse.cpp:
+  Simple image processing code that allows multiple cheap usb cameras to take pictures sequetially.  
+  Useful for timelapse movies, monitoring plants growing, and other changes that occur slowly.
+  Recommend calling from cron.
+  Uses openCV c++ library, xcode, cmake and make.  
+  This code needs updating for the latest versions of MacOSX. 
