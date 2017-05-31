@@ -2,6 +2,5 @@ Simple image processing code that allows multiple cheap usb cameras to take pict
 Useful for timelapse movies, monitoring plants growing, and other changes that occur slowly.
 Recommend calling from cron.
 Uses openCV c++ library, xcode, cmake and make.  
-Install for openCV instructions: 
-    http://blogs.wcode.org/2014/10/howto-install-build-and-use-opencv-macosx-10-10/
-Many thanks to stackoverflow and people who posted code on this problem.  It would have been impossible otherwise.
+
+This code needs updating for the latest versions of MacOSX. 
