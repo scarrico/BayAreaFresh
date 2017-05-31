@@ -3,6 +3,9 @@
 # Use this to get different versions of python to run nicely in a virtual environment.
 # To test this worked execute:
 #   python -c "import cv2; print(cv2.__version__)"
+#
+# HINT: If things aren't working right, check ~/.bashrc and ~/.bash_profile
+# Those files had better not be initializing a virtual environment besides pyenv
 
 #!/usr/bin/env bash
 set -o errexit
