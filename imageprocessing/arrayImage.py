@@ -1,10 +1,11 @@
 import cv2
 import numpy as np
 from PIL import Image
-import pytesseract
+from tesserocr import PyTessBaseAPI, RIL
+
 from logging import FileHandler
 import logging
-# Required patch on __init__.py
+# vlogging required patch in __init__.py
 # Added .decode() to line with base64 print
 # Left message on github.
 from vlogging import VisualRecord
@@ -13,16 +14,18 @@ from vlogging import VisualRecord
 class arrayImage(object):
     def __init__(self, showImages=True, printImages=True):
         # Include security and date, security and timeframe
-        self.topMargin4Date = 0
+        scale = 1.5
+        self.topMargin4Date = int(round(0*scale))
         # Bottom of data, security, and timeframe
-        self.bottomMargin4Date = 130
-        self.topMargin4Array = 330
-        self.bottomMargin4Array = 840
-        self.leftMargin = 0  # For entire array
-        self.leftMargin4JustBars = 210
+        self.bottomMargin4Date = int(round(130*scale))
+        self.topMargin4Array = int(round(330*scale))
+        self.bottomMargin4Array = int(round(840*scale))
+        self.leftMargin = 0 * scale  # For entire array
+        self.leftMargin4JustBars = int(round(210*scale))
         self.leftMargin = self.leftMargin4JustBars
-        self.leftMargin = 20 # Want left labels now
-        self.rightMargin = 750
+        self.leftMargin = int(round(20*scale))  # Want left labels now
+        self.rightMargin = int(round(750*scale))
+        self.rightMarginWords = int(round(240*scale))
         self.imageLoc = ""
 
     def readArray(self, loc, printFile="imgReadIn.png"):
@@ -41,6 +44,10 @@ class arrayImage(object):
     def cropDateInfo(self, img):
         return img[self.topMargin4Date:self.bottomMargin4Date,
                    self.leftMargin:self.rightMargin]
+
+    def cropWords(self, img):
+        return img[self.topMargin4Array:self.bottomMargin4Array,
+                   self.leftMargin:self.rightMarginWords]
 
     def segmentWithThreshold(self, img):
         ret, thresh = cv2.threshold(img, 0, 255,
@@ -79,16 +86,27 @@ logger.addHandler(fh)
 arrayDaily = arrayImage()
 imageLoc = "../arrays/daily/Dow/array/daily-Dow-array-2017-05-30-20.27.08.png"
 img = arrayDaily.readArray(imageLoc)
+img = cv2.resize(img, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
 logger.debug(VisualRecord("Original Image", img, "End image"))
-grayImg = arrayDaily.image2Gray(arrayDaily.image)
-logger.debug(VisualRecord("gray Image", grayImg, "End image"))
-croppedArray = arrayDaily.cropArray(grayImg)
+grayImg = arrayDaily.image2Gray(img)
+(thresh, im_bw) = cv2.threshold(grayImg, 128, 255,
+                                cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+logger.debug(VisualRecord("b and w Image", im_bw, "End image"))
+croppedArray = arrayDaily.cropArray(im_bw)
+croppedArray = arrayDaily.cropWords(im_bw)
 logger.debug(VisualRecord("cropped gray Image", croppedArray, "End image"))
 thresh = arrayDaily.segmentWithThreshold(croppedArray)
 logger.debug(VisualRecord("cropped gray Image", thresh, "End image"))
-res = cv2.resize(croppedArray,None,fx=2, fy=2, interpolation = cv2.INTER_CUBIC)
 
-img = Image.fromarray(res)
+img = Image.fromarray(thresh)
 logger.debug(VisualRecord("Tesseract Input", img, "End image"))
-txt = pytesseract.image_to_string(img)
-print(txt)
+with PyTessBaseAPI() as api:
+    api.SetImage(img)
+    boxes = api.GetComponentImages(RIL.TEXTLINE, True)
+    for i, (im, box, _, _) in enumerate(boxes):
+        api.SetRectangle(box['x'], box['y'], box['w'], box['h'])
+        ocrResult = api.GetUTF8Text()
+        conf = api.MeanTextConf()
+        print(ocrResult)
+        print(repr(box))
