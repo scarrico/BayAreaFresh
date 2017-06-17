@@ -54,6 +54,49 @@ class arrayImage(object):
                                     cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
         return thresh
 
+    def cleanImage(self, img):
+        # INTER_LANCZOS4 is Similar to INTER_CUBIC
+        # Magnify
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        logger.debug(VisualRecord("Original Image", img, "End image"))
+        # b&w for better recognition
+        grayImg = arrayDaily.image2Gray(img)
+        (thresh, im_bw) = cv2.threshold(grayImg, 128, 255,
+                                        cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+        thresh = arrayDaily.segmentWithThreshold(im_bw)
+        # Sharpen
+        blur = cv2.GaussianBlur(thresh,(1,1),0)
+        sharp = blur.copy()
+        alpha = 0.5
+        alpha = 1.5
+        gamma = 0.2
+        gamma = 0
+        weighted = cv2.addWeighted(blur, alpha, sharp, 1-alpha, gamma, sharp)
+        # Denoise
+        clean = sharp.copy()
+        cv2.fastNlMeansDenoising(sharp, clean, 55, 5, 21)
+        return(clean)
+    def OcrSegment (self, sharp):
+        # Given a (hopefully) sharpened image, ocr the segment
+        img = Image.fromarray(sharp)
+        logger.debug(VisualRecord("Tesseract Input", img, "End image"))
+        # Read off the labels one at a time.  Need a margin
+        # since otherwise the cropping is too close for tesseract.
+        with PyTessBaseAPI() as api:
+            api.SetImage(img)
+            boxes = api.GetComponentImages(RIL.TEXTLINE, True)
+            for i, (im, box, _, _) in enumerate(boxes):
+                margin = 5
+                api.SetRectangle(box['x'], box['y'], box['w']+margin, box['h']+margin)
+                croppedSegment = sharp[box['y']:box['y']+box['h']+margin, box['x']:box['x']+box['w']+margin]
+                ocrResult = api.GetUTF8Text()
+                conf = api.MeanTextConf()
+                print(ocrResult)
+                tailPrint = "\n"+ocrResult+"end image"
+                logger.debug(VisualRecord("ocrResult", croppedSegment, tailPrint))
+                print(repr(box))
+
     # Produces outline of bars
     def segmentWithCanny(self, img):
         edges = cv2.Canny(img, 100, 200)
@@ -86,50 +129,7 @@ logger.addHandler(fh)
 arrayDaily = arrayImage()
 imageLoc = "../arrays/daily/Dow/array/daily-Dow-array-2017-05-30-20.27.08.png"
 img = arrayDaily.readArray(imageLoc)
-# INTER_LANCZOS4 is Similar to INTER_CUBIC
-img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-logger.debug(VisualRecord("Original Image", img, "End image"))
-grayImg = arrayDaily.image2Gray(img)
-(thresh, im_bw) = cv2.threshold(grayImg, 128, 255,
-                                cv2.THRESH_BINARY | cv2.THRESH_OTSU)
-
-logger.debug(VisualRecord("b and w Image", im_bw, "End image"))
-
-croppedArray = arrayDaily.cropArray(im_bw)
-croppedArray = arrayDaily.cropWords(im_bw)
-logger.debug(VisualRecord("cropped gray Image", croppedArray, "End image"))
-
-
-thresh = arrayDaily.segmentWithThreshold(croppedArray)
-logger.debug(VisualRecord("cropped gray Image", thresh, "End image"))
-
-blur = cv2.GaussianBlur(thresh,(1,1),0)
-sharp = blur.copy()
-alpha = 0.5
-alpha = 1.5
-gamma = 0.2
-gamma = 0
-
-weighted = cv2.addWeighted(blur, alpha, sharp, 1-alpha, gamma, sharp)
-thresh = sharp
-logger.debug(VisualRecord("sharpened thresh image", thresh, "End image"))
-
-img = Image.fromarray(thresh)
-logger.debug(VisualRecord("Tesseract Input", img, "End image"))
-# Read off the labels one at a time.  Need a margin
-# since otherwise the cropping is too close for tesseract.
-with PyTessBaseAPI() as api:
-    api.SetImage(img)
-    boxes = api.GetComponentImages(RIL.TEXTLINE, True)
-    for i, (im, box, _, _) in enumerate(boxes):
-        margin = 3
-        api.SetRectangle(box['x'], box['y'], box['w']+margin, box['h']+margin)
-        croppedSegment = sharp[box['y']:box['y']+box['h']+margin, box['x']:box['x']+box['w']+margin]
-        ocrResult = api.GetUTF8Text()
-        conf = api.MeanTextConf()
-        print(ocrResult)
-        tailPrint = "\n"+ocrResult+"end image"
-        logger.debug(VisualRecord("ocrResult", croppedSegment, tailPrint))
-        print(repr(box))
-
-
+im_bw = arrayDaily.cleanImage(img)
+sharp = arrayDaily.cropArray(im_bw)
+sharp = arrayDaily.cropWords(im_bw)
+arrayDaily.OcrSegment(sharp)
