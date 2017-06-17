@@ -10,22 +10,22 @@ import logging
 # Left message on github.
 from vlogging import VisualRecord
 
-scale = 2
+
 class arrayImage(object):
     def __init__(self, showImages=True, printImages=True):
+        self.scale = 2
         # Include security and date, security and timeframe
-        scale = 2
-        self.topMargin4Date = int(round(0*scale))
+        self.topMargin4Date = int(round(0*self.scale))
         # Bottom of data, security, and timeframe
-        self.bottomMargin4Date = int(round(130*scale))
-        self.topMargin4Array = int(round(330*scale))
-        self.bottomMargin4Array = int(round(840*scale))
-        self.leftMargin = 0 * scale  # For entire array
-        self.leftMargin4JustBars = int(round(210*scale))
+        self.bottomMargin4Date = int(round(130*self.scale))
+        self.topMargin4Array = int(round(330*self.scale))
+        self.bottomMargin4Array = int(round(840*self.scale))
+        self.leftMargin = 0 * self.scale  # For entire array
+        self.leftMargin4JustBars = int(round(210*self.scale))
         self.leftMargin = self.leftMargin4JustBars
-        self.leftMargin = int(round(20*scale))  # Want left labels now
-        self.rightMargin = int(round(750*scale))
-        self.rightMarginWords = int(round(240*scale))
+        self.leftMargin = int(round(20*self.scale))  # Want left labels now
+        self.rightMargin = int(round(750*self.scale))
+        self.rightMarginWords = int(round(240*self.scale))
         self.imageLoc = ""
 
     def readArray(self, loc, printFile="imgReadIn.png"):
@@ -57,7 +57,8 @@ class arrayImage(object):
     def cleanImage(self, img):
         # INTER_LANCZOS4 is Similar to INTER_CUBIC
         # Magnify
-        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        img = cv2.resize(img, None, fx=self.scale, fy=self.scale,
+                         interpolation=cv2.INTER_CUBIC)
         logger.debug(VisualRecord("Original Image", img, "End image"))
         # b&w for better recognition
         grayImg = arrayDaily.image2Gray(img)
@@ -66,18 +67,19 @@ class arrayImage(object):
 
         thresh = arrayDaily.segmentWithThreshold(im_bw)
         # Sharpen
-        blur = cv2.GaussianBlur(thresh,(1,1),0)
+        blur = cv2.GaussianBlur(thresh, (1, 1), 0)
         sharp = blur.copy()
         alpha = 0.5
         alpha = 1.5
         gamma = 0.2
         gamma = 0
-        weighted = cv2.addWeighted(blur, alpha, sharp, 1-alpha, gamma, sharp)
+        cv2.addWeighted(blur, alpha, sharp, 1-alpha, gamma, sharp)
         # Denoise
         clean = sharp.copy()
         cv2.fastNlMeansDenoising(sharp, clean, 55, 5, 21)
         return(clean)
-    def OcrSegment (self, sharp):
+
+    def OcrSegment(self, sharp):
         # Given a (hopefully) sharpened image, ocr the segment
         img = Image.fromarray(sharp)
         logger.debug(VisualRecord("Tesseract Input", img, "End image"))
@@ -88,20 +90,23 @@ class arrayImage(object):
             boxes = api.GetComponentImages(RIL.TEXTLINE, True)
             for i, (im, box, _, _) in enumerate(boxes):
                 margin = 5
-                api.SetRectangle(box['x'], box['y'], box['w']+margin, box['h']+margin)
-                croppedSegment = sharp[box['y']:box['y']+box['h']+margin, box['x']:box['x']+box['w']+margin]
+                api.SetRectangle(box['x'], box['y'],
+                                 box['w']+margin, box['h']+margin)
+                croppedSegment = sharp[box['y']:box['y']+box['h']+margin,
+                                       box['x']:box['x']+box['w']+margin]
                 ocrResult = api.GetUTF8Text()
                 conf = api.MeanTextConf()
                 print(ocrResult)
                 tailPrint = "\n"+ocrResult+"end image"
-                logger.debug(VisualRecord("ocrResult", croppedSegment, tailPrint))
-                print(repr(box))
-
+                logger.debug(VisualRecord("ocrResult",
+                                          croppedSegment, tailPrint))
+                print(repr(box)) 
+        
     # Produces outline of bars
     def segmentWithCanny(self, img):
         edges = cv2.Canny(img, 100, 200)
         return edges
-
+        
     @property
     def image(self):
         return self._image
@@ -109,15 +114,15 @@ class arrayImage(object):
     @image.setter
     def image(self, value):
         self._image = value
-
+        
     @property
-    def grayImage(self):
+    def grayImage(self): 
         return self._grayImage
-
+        
     @grayImage.setter
     def grayImage(self, value):
         self._grayImage = value
-
+                   
 
 # BEGIN Set up debugging system
 logger = logging.getLogger("demo")
@@ -125,11 +130,11 @@ fh = FileHandler('test.html', mode="w")
 logger.setLevel(logging.DEBUG)
 logger.addHandler(fh)
 # END Set up debugging system
-
+                   
 arrayDaily = arrayImage()
 imageLoc = "../arrays/daily/Dow/array/daily-Dow-array-2017-05-30-20.27.08.png"
 img = arrayDaily.readArray(imageLoc)
-im_bw = arrayDaily.cleanImage(img)
+im_bw = arrayDaily.cleanImage(img)  
 sharp = arrayDaily.cropArray(im_bw)
 sharp = arrayDaily.cropWords(im_bw)
 arrayDaily.OcrSegment(sharp)
