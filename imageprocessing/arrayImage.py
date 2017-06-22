@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from PIL import Image
 from tesserocr import PyTessBaseAPI, RIL
+from difflib import SequenceMatcher as SM
 
 from logging import FileHandler
 import logging
@@ -32,38 +33,48 @@ class arrayImage(object):
         gen = (i for j in (range(ord('a'), ord('z')+1),
                            range(ord('A'), ord('Z')+1),
                            range(ord('0'), ord('9')+1)) for i in j)
-        
+
         for i in gen:
             self.whiteList = self.whiteList+chr(i)
         self.whiteList = self.whiteList+chr(ord('-'))
-        
+        self.arrayDict = {}   # representation of the array
+        self.unclassified = "unclassified"
+        self.timeUnit = "timeUnit"
+        self.ensembleSegment = "ensembleSegment"
+        self.unInteresting = "unInteresting"
+
+
     def readArray(self, loc, printFile="imgReadIn.png"):
         self.imageLoc = loc
         self.image = cv2.imread(loc)
         return self.image
-                   
+
     def image2Gray(self, img, printFile="grayTransform.png"):
         self.grayImage = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         return self.grayImage
-                   
+
+    # Will need generalized cropping function to accomidate
+    # different image sources.  Use this simple code for now.
     def cropArray(self, img):
         return img[self.topMargin4Array:self.bottomMargin4Array,
                    self.leftMargin:self.rightMargin]
-                   
+
     def cropDateInfo(self, img):
         return img[self.topMargin4Date:self.bottomMargin4Date,
                    self.leftMargin:self.rightMargin]
-                                    
+
     def cropWords(self, img):
         return img[self.topMargin4Array:self.bottomMargin4Array,
                    self.leftMargin:self.rightMarginWords]
-        
+
     def segmentWithThreshold(self, img):
         ret, thresh = cv2.threshold(img, 0, 255,
                                     cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
         return thresh
-        
     def cleanImage(self, img):
+        # Note: didn't try bilateral filtering which might be good:
+        # blur = cv2.bilateralFilter(img,9,75,75)
+        #
         # INTER_LANCZOS4 is Similar to INTER_CUBIC
         # Magnify
         img = cv2.resize(img, None, fx=self.scale, fy=self.scale,
@@ -99,6 +110,7 @@ class arrayImage(object):
             api.SetVariable("tessedit_char_whitelist", self.whiteList)
             api.SetImage(img)
             boxes = api.GetComponentImages(RIL.TEXTLINE, True)
+            i = 0
             for i, (im, box, _, _) in enumerate(boxes):
                 margin = 5
                 api.SetRectangle(box['x'], box['y'],
@@ -110,10 +122,98 @@ class arrayImage(object):
                 conf = api.MeanTextConf()
                 print("confidences: ", api.AllWordConfidences())
                 print(ocrResult)
+                print (dir(api.GetBoxText(0)))
+                print ("==>", self.classifyEntry(ocrResult))
+                # Still need to split time units and aggregate when necessary with date
+                classOfLine = self.classifyEntry(ocrResult)
+                self.arrayDict[i] = [classOfLine,api.GetBoxText(0), box,
+                                     ocrResult]
+                # split, find, etc defined for this.
+                # print(api.GetBoxText(0)) # Letter coordinates
+
                 tailPrint = "\n"+ocrResult+"end image"
                 logger.debug(VisualRecord("ocrResult",
                                           croppedSegment, tailPrint))
                 print(repr(box))
+        print(self.arrayDict)
+    def classifyEntry(self, ocrResult):
+        # Simple heuristic based classifier
+        self.unclassified = "unclassified"
+        self.dateUnit = "dateUnit"
+        self.timeUnit = "timeUnit"
+        self.granularity = "grandularity"
+        # So we can do i,j for height of bar chart
+        # i = one of aggregate..overnightVol.
+        # j = one of the time units, possibly a compound one
+        # In the case of compound time, date and month are here.
+        self.splitTimeUnit = "splitTimeUnit"
+        self.ensembleSegment = "ensembleSegment"
+        self.unInteresting = "unInteresting"
+        self.aggregate = "Aggregate"
+        self.transverse = "Transverse"
+        self.longTerm = "Long Term"
+        self.tradingCycle = "Trading Cycle"
+        self.directionChange = "Direction Change"
+        self.panicCycle = "Panic Cycle"
+        self.internalVolatility = "Internal Volatility"
+        self.overnightVolatility = "Overnight Volatility"
+        self.daily = "Daily"
+        self.weekly = "Weekly"
+        self.monthly = "Monthly"
+        self.quarterly = "Quarterly"
+        self.yearly = "Yearly"
+        allGranularities = [self.daily, self.weekly, self.monthly, self.quarterly,
+                            self.yearly]
+        ensemble = [self.aggregate, self.transverse, self.longTerm,
+                    self.tradingCycle, self.directionChange, self.panicCycle,
+                    self.panicCycle, self.internalVolatility, self.overnightVolatility]
+        self.timePeriods = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+                            '2015', '2016', '2017', '2018', '2019',
+                            '2020', '2021', '2022', '2023', '2024',
+                            '2025', '2026', '2027', '2028', '2029',
+                            '2030', '2031', '2032', '2033', '2034']
+        countDateUnits = 0
+        # Should change in below to fuzzy match
+        # SM(None, s, s2).ratio()
+        for t in self.timePeriods:
+            countDateUnits += ocrResult.count(t)
+        if countDateUnits > 10:
+                return(self.dateUnit)
+        for e in ensemble:
+            if (e in ocrResult) and \
+               (len(e)-2 < len(ocrResult) < (len(e)+5)):
+                return(self.ensembleSegment)
+        countNumbers = 0
+        for n in range(1,31):
+            if str(n) in ocrResult:
+                countNumbers += 1
+        if countNumbers > 10:
+            return(self.timeUnit)
+        for g in allGranularities:
+            if g in ocrResult:
+                return(self.granularity)
+        return(self.unclassified)
+
+    def extractData(self, sharp, orig):
+        pass
+        # Ocr output to document representation
+        # we need a numpy array for k-means, but the data
+        # associated with an entry is rather complex and regular python
+        # data structures would be convinient.  So we treat two structures
+        # like two database tables with an id as a key between the two.
+        # The numpy array is the height we will cluster on, id.
+        # The python structure is a dict indexed by id and contains a list of box, boxText.
+        #
+        # height of bar, color of bar, x, y, w, h, Text, 
+        #
+        # classify document rows:
+        # (array label, array indicator, timeUnit1, timeUnit2, miscText)
+        # Get bar arrayLabel*(1..timeUnits)
+        # Extract bar height in pixels
+        # Build/Use bar height classifier 0..5, probably gaussian mixture model
+        # K-means will probably work better
+        # Represent array data and save
 
     # Produces outline of bars
     def segmentWithCanny(self, img):
@@ -148,8 +248,5 @@ arrayDaily = arrayImage()
 imageLoc = "../arrays/daily/Dow/array/daily-Dow-array-2017-05-30-20.27.08.png"
 img = arrayDaily.readArray(imageLoc)
 im_bw = arrayDaily.cleanImage(img)
-sharp = arrayDaily.cropArray(im_bw)
-arrayDaily.OcrSegment(sharp)
+arrayDaily.OcrSegment(im_bw)
 exit()
-sharp = arrayDaily.cropWords(im_bw)
-arrayDaily.OcrSegment(sharp)
