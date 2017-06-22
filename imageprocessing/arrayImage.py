@@ -43,7 +43,6 @@ class arrayImage(object):
         self.ensembleSegment = "ensembleSegment"
         self.unInteresting = "unInteresting"
 
-
     def readArray(self, loc, printFile="imgReadIn.png"):
         self.imageLoc = loc
         self.image = cv2.imread(loc)
@@ -71,6 +70,7 @@ class arrayImage(object):
         ret, thresh = cv2.threshold(img, 0, 255,
                                     cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
         return thresh
+
     def cleanImage(self, img):
         # Note: didn't try bilateral filtering which might be good:
         # blur = cv2.bilateralFilter(img,9,75,75)
@@ -98,8 +98,8 @@ class arrayImage(object):
         clean = sharp.copy()
         cv2.fastNlMeansDenoising(sharp, clean, 55, 5, 21)
         return(clean)
-
-    def OcrSegment(self, sharp):
+    
+        def OcrSegment(self, sharp):
         # Given a (hopefully) sharpened image, ocr the segment
         img = Image.fromarray(sharp)
         logger.debug(VisualRecord("Tesseract Input", img, "End image"))
@@ -120,13 +120,14 @@ class arrayImage(object):
                 ocrResult = api.GetUTF8Text()
                 # Mean confidences
                 conf = api.MeanTextConf()
-                print("confidences: ", api.AllWordConfidences())
+                # print("confidences: ", api.AllWordConfidences())
                 print(ocrResult)
-                print (dir(api.GetBoxText(0)))
-                print ("==>", self.classifyEntry(ocrResult))
-                # Still need to split time units and aggregate when necessary with date
+                # print (dir(api.GetBoxText(0)))
+                print("==>", self.classifyEntry(ocrResult))
+                # Still need to split time units and aggregate
+                # when necessary with date
                 classOfLine = self.classifyEntry(ocrResult)
-                self.arrayDict[i] = [classOfLine,api.GetBoxText(0), box,
+                self.arrayDict[i] = [classOfLine, api.GetBoxText(0), box,
                                      ocrResult]
                 # split, find, etc defined for this.
                 # print(api.GetBoxText(0)) # Letter coordinates
@@ -136,6 +137,7 @@ class arrayImage(object):
                                           croppedSegment, tailPrint))
                 print(repr(box))
         print(self.arrayDict)
+
     def classifyEntry(self, ocrResult):
         # Simple heuristic based classifier
         self.unclassified = "unclassified"
@@ -151,22 +153,25 @@ class arrayImage(object):
         self.unInteresting = "unInteresting"
         self.aggregate = "Aggregate"
         self.transverse = "Transverse"
+        self.empirical = "Empirical"
         self.longTerm = "Long Term"
         self.tradingCycle = "Trading Cycle"
         self.directionChange = "Direction Change"
         self.panicCycle = "Panic Cycle"
         self.internalVolatility = "Internal Volatility"
         self.overnightVolatility = "Overnight Volatility"
-        self.daily = "Daily"
-        self.weekly = "Weekly"
-        self.monthly = "Monthly"
-        self.quarterly = "Quarterly"
-        self.yearly = "Yearly"
-        allGranularities = [self.daily, self.weekly, self.monthly, self.quarterly,
-                            self.yearly]
+        self.daily = "DAILY FORECAST"
+        self.weekly = "WEEKLY FORECAST"
+        self.monthly = "MONTHLY FORECAST"
+        self.quarterly = "QUARTERLY FORECAST"
+        self.yearly = "YEARLY FORECAST"
+        allGranularities = [self.daily, self.weekly, self.monthly,
+                            self.quarterly, self.yearly]
         ensemble = [self.aggregate, self.transverse, self.longTerm,
-                    self.tradingCycle, self.directionChange, self.panicCycle,
-                    self.panicCycle, self.internalVolatility, self.overnightVolatility]
+                    self.empirical, self.tradingCycle,
+                    self.directionChange, self.panicCycle,
+                    self.panicCycle, self.internalVolatility,
+                    self.overnightVolatility]
         self.timePeriods = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                             'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
                             '2015', '2016', '2017', '2018', '2019',
@@ -181,13 +186,13 @@ class arrayImage(object):
         if countDateUnits > 10:
                 return(self.dateUnit)
         for e in ensemble:
-            if (e in ocrResult) and \
-               (len(e)-2 < len(ocrResult) < (len(e)+5)):
+            # if (e in ocrResult) and \
+            # print (SM(None, e, ocrResult).ratio())
+            if (SM(None, e, ocrResult).ratio() > .8):
                 return(self.ensembleSegment)
         countNumbers = 0
-        for n in range(1,31):
-            if str(n) in ocrResult:
-                countNumbers += 1
+        for n in range(1, 31):
+            countNumbers += ocrResult.count(str(n))
         if countNumbers > 10:
             return(self.timeUnit)
         for g in allGranularities:
@@ -203,9 +208,10 @@ class arrayImage(object):
         # data structures would be convinient.  So we treat two structures
         # like two database tables with an id as a key between the two.
         # The numpy array is the height we will cluster on, id.
-        # The python structure is a dict indexed by id and contains a list of box, boxText.
+        # The python structure is a dict indexed by id and contains a list
+        # of box, boxText.
         #
-        # height of bar, color of bar, x, y, w, h, Text, 
+        # height of bar, color of bar, x, y, w, h, Text,
         #
         # classify document rows:
         # (array label, array indicator, timeUnit1, timeUnit2, miscText)
