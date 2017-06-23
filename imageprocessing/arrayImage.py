@@ -3,6 +3,7 @@ import numpy as np
 from PIL import Image
 from tesserocr import PyTessBaseAPI, RIL
 from difflib import SequenceMatcher as SM
+import re
 
 from logging import FileHandler
 import logging
@@ -99,7 +100,7 @@ class arrayImage(object):
         cv2.fastNlMeansDenoising(sharp, clean, 55, 5, 21)
         return(clean)
     
-        def OcrSegment(self, sharp):
+        def ocrSegment(self, sharp):
         # Given a (hopefully) sharpened image, ocr the segment
         img = Image.fromarray(sharp)
         logger.debug(VisualRecord("Tesseract Input", img, "End image"))
@@ -127,8 +128,10 @@ class arrayImage(object):
                 # Still need to split time units and aggregate
                 # when necessary with date
                 classOfLine = self.classifyEntry(ocrResult)
+                # [classification of line, box info of text, box info, text,
+                # coordinate which we use to find bar if relevant.]
                 self.arrayDict[i] = [classOfLine, api.GetBoxText(0), box,
-                                     ocrResult]
+                                     ocrResult, 0]
                 # split, find, etc defined for this.
                 # print(api.GetBoxText(0)) # Letter coordinates
 
@@ -136,7 +139,44 @@ class arrayImage(object):
                 logger.debug(VisualRecord("ocrResult",
                                           croppedSegment, tailPrint))
                 print(repr(box))
-        print(self.arrayDict)
+        self.fixDates()
+        # print(self.arrayDict)
+
+    def fixDates(self):
+        # Modify self.arrayDict so that dates and times are combined
+        # if needed and then split into properly labeled single
+        # entries.  Also add mid-point used to find the X axis
+        # coordinate we follow to get the heights of bars.
+        #
+        # Get the locations of date related data
+        timeUnitIndex = []
+        dateUnitIndex = []
+        self.ocrStringIndex = 3
+        for line in self.arrayDict:
+            if self.arrayDict[line][0] == self.dateUnit:
+                dateUnitIndex.append(line)
+            if self.arrayDict[line][0] == self.timeUnit:
+                timeUnitIndex.append(line)
+        if len(timeUnitIndex) > 0:
+            for tu in timeUnitIndex:
+                times = self.arrayDict[tu][self.ocrStringIndex].split()
+                print(times)
+                for t in times:
+                    theTimes = re.findall('[0-9]+', t)
+                    print(theTimes)
+        if len(dateUnitIndex) > 0:
+            for d in dateUnitIndex:
+                theDates = self.arrayDict[d][self.ocrStringIndex].split()
+                print(theDates)
+        # Simple case dates and times match
+        if len(theDates) == len(theTimes):
+            print("write code when dates and times match")
+        elif len(theDates) > len(theTimes):
+            print("number of dates > times.  Assuming missing last entry.")
+        elif len(theDates) < len(theTimes):
+            print("write code when number of dates < times ")
+        print(timeUnitIndex)
+        print(dateUnitIndex)
 
     def classifyEntry(self, ocrResult):
         # Simple heuristic based classifier
@@ -179,15 +219,11 @@ class arrayImage(object):
                             '2025', '2026', '2027', '2028', '2029',
                             '2030', '2031', '2032', '2033', '2034']
         countDateUnits = 0
-        # Should change in below to fuzzy match
-        # SM(None, s, s2).ratio()
         for t in self.timePeriods:
             countDateUnits += ocrResult.count(t)
         if countDateUnits > 10:
                 return(self.dateUnit)
         for e in ensemble:
-            # if (e in ocrResult) and \
-            # print (SM(None, e, ocrResult).ratio())
             if (SM(None, e, ocrResult).ratio() > .8):
                 return(self.ensembleSegment)
         countNumbers = 0
@@ -242,7 +278,6 @@ class arrayImage(object):
     def grayImage(self, value):
         self._grayImage = value
 
-
 # BEGIN Set up debugging system
 logger = logging.getLogger("demo")
 fh = FileHandler('test.html', mode="w")
@@ -254,5 +289,5 @@ arrayDaily = arrayImage()
 imageLoc = "../arrays/daily/Dow/array/daily-Dow-array-2017-05-30-20.27.08.png"
 img = arrayDaily.readArray(imageLoc)
 im_bw = arrayDaily.cleanImage(img)
-arrayDaily.OcrSegment(im_bw)
+arrayDaily.ocrSegment(im_bw)
 exit()
