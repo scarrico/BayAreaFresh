@@ -289,11 +289,11 @@ class arrayImage(object):
         self._grayImage = value
 
 
-dirWithArrays = "../arrays/daily/Dow/array/"
+dirWithArrays = "../../arrays/daily/Dow/array/"
 iteration = 0
 # BEGIN Set up debugging system
 logger = logging.getLogger("demo")
-logFile = "../bin/test"+str(iteration)+".html"
+logFile = "../../bin/test"+str(iteration)+".html"
 fh = FileHandler(logFile, mode="w")
 logger.setLevel(logging.DEBUG)
 logger.addHandler(fh)
@@ -307,5 +307,5 @@ for imageLoc in glob.glob(dirWithArrays+"*.png"):
         im_bw = arrayDaily.cleanImage(img)
         arrayDaily.ocrSegment(im_bw)
         iteration += 1
-        if iteration > 0:
+        if iteration > 6:
             exit()
