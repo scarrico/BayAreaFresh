@@ -1,4 +1,5 @@
 import cv2
+import glob
 import numpy as np
 from PIL import Image
 from tesserocr import PyTessBaseAPI, RIL
@@ -80,7 +81,7 @@ class arrayImage(object):
         # Magnify
         img = cv2.resize(img, None, fx=self.scale, fy=self.scale,
                          interpolation=cv2.INTER_CUBIC)
-        logger.debug(VisualRecord("Original Image", img, "End image"))
+        # logger.debug(VisualRecord("Original Image", img, "End image"))
         # b&w for better recognition
         grayImg = arrayDaily.image2Gray(img)
         (thresh, im_bw) = cv2.threshold(grayImg, 128, 255,
@@ -99,17 +100,24 @@ class arrayImage(object):
         clean = sharp.copy()
         cv2.fastNlMeansDenoising(sharp, clean, 55, 5, 21)
         return(clean)
-    
-        def ocrSegment(self, sharp):
+
+    def ocrSegment(self, sharp):
+        print("input image sharp shape:", sharp.shape)
+        maxY = sharp.shape[0] # Rows
+        maxX = sharp.shape[1] # Columns
         # Given a (hopefully) sharpened image, ocr the segment
         img = Image.fromarray(sharp)
-        logger.debug(VisualRecord("Tesseract Input", img, "End image"))
+        # logger.debug(VisualRecord("Tesseract Input", img, "End image"))
         # Read off the labels one at a time.  Need a margin
         # since otherwise the cropping is too close for tesseract.
         with PyTessBaseAPI() as api:
-            # api.Init(".","eng",tesseract.OEM_DEFAULT)
+            # api.Init(".","eng",OEM_DEFAULT)
+
             api.SetVariable("tessedit_char_whitelist", self.whiteList)
             api.SetImage(img)
+
+            timg = api.GetThresholdedImage()
+            logger.debug(VisualRecord("Tesseract's image ***", timg, "End image"))
             boxes = api.GetComponentImages(RIL.TEXTLINE, True)
             i = 0
             for i, (im, box, _, _) in enumerate(boxes):
@@ -151,6 +159,8 @@ class arrayImage(object):
         # Get the locations of date related data
         timeUnitIndex = []
         dateUnitIndex = []
+        theTimes = []
+        theDates = []
         self.ocrStringIndex = 3
         for line in self.arrayDict:
             if self.arrayDict[line][0] == self.dateUnit:
@@ -162,19 +172,19 @@ class arrayImage(object):
                 times = self.arrayDict[tu][self.ocrStringIndex].split()
                 print(times)
                 for t in times:
-                    theTimes = re.findall('[0-9]+', t)
-                    print(theTimes)
+                    theTimes.append(re.findall('[0-9]+', t)[0])
+            print("The Times:", theTimes)
         if len(dateUnitIndex) > 0:
             for d in dateUnitIndex:
                 theDates = self.arrayDict[d][self.ocrStringIndex].split()
-                print(theDates)
+            print("The Dates:", theDates)
         # Simple case dates and times match
         if len(theDates) == len(theTimes):
-            print("write code when dates and times match")
+            print("NOT TESTED: write code when dates and times match")
         elif len(theDates) > len(theTimes):
-            print("number of dates > times.  Assuming missing last entry.")
+            print("NOT TESTED: write code when dates > times match")
         elif len(theDates) < len(theTimes):
-            print("write code when number of dates < times ")
+            print("NOT TESTED: write code when number of dates < times ")
         print(timeUnitIndex)
         print(dateUnitIndex)
 
@@ -278,16 +288,24 @@ class arrayImage(object):
     def grayImage(self, value):
         self._grayImage = value
 
+
+dirWithArrays = "../arrays/daily/Dow/array/"
+iteration = 0
 # BEGIN Set up debugging system
 logger = logging.getLogger("demo")
-fh = FileHandler('test.html', mode="w")
+logFile = "../bin/test"+str(iteration)+".html"
+fh = FileHandler(logFile, mode="w")
 logger.setLevel(logging.DEBUG)
 logger.addHandler(fh)
 # END Set up debugging system
-
-arrayDaily = arrayImage()
-imageLoc = "../arrays/daily/Dow/array/daily-Dow-array-2017-05-30-20.27.08.png"
-img = arrayDaily.readArray(imageLoc)
-im_bw = arrayDaily.cleanImage(img)
-arrayDaily.ocrSegment(im_bw)
-exit()
+# imageLoc = "../arrays/daily/Dow/array/daily-Dow-array-2017-05-30-20.27.08.png"
+for imageLoc in glob.glob(dirWithArrays+"*.png"):
+        print("processing file: ", imageLoc)
+        arrayDaily = arrayImage()
+        # imageLoc = "../arrays/daily/Dow/array/daily-Dow-array-2017-05-24-21.37.37.png"
+        img = arrayDaily.readArray(imageLoc)
+        im_bw = arrayDaily.cleanImage(img)
+        arrayDaily.ocrSegment(im_bw)
+        iteration += 1
+        if iteration > 0:
+            exit()
