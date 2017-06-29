@@ -1,13 +1,18 @@
 import cv2
 import glob
+import sys
 import numpy as np
 from PIL import Image
 from tesserocr import PyTessBaseAPI, RIL
 from difflib import SequenceMatcher as SM
 import re
+import datetime
 
 from logging import FileHandler
 import logging
+
+sys.path.insert(0, '../utilities')
+from nyseTradingDays import NYSE_tradingdays, NYSE_holidays
 # vlogging required patch in __init__.py
 # Added .decode() to line with base64 print
 # Left message on github.
@@ -151,6 +156,14 @@ class arrayImage(object):
         # print(self.arrayDict)
 
     def fixDates(self):
+        # Heuristics wont work reliably.  Tesseract is too flaky.  
+        # Create ML model instead. Fine example of replacing code
+        # with ML.
+        #
+        # For now to test this out we will just take the first 
+        # date month pair and then count out the number of slots
+        # we find using the nyse trading days gist.
+        #
         # Modify self.arrayDict so that dates and times are combined
         # if needed and then split into properly labeled single
         # entries.  Also add mid-point used to find the X axis
@@ -162,6 +175,8 @@ class arrayImage(object):
         theTimes = []
         theDates = []
         self.ocrStringIndex = 3
+        tdays = list((NYSE_tradingdays(datetime.datetime(2017, 5,22), datetime.datetime(2017, 5, 22)+datetime.timedelta(days=11))))
+        print (tdays)
         for line in self.arrayDict:
             if self.arrayDict[line][0] == self.dateUnit:
                 dateUnitIndex.append(line)
@@ -172,7 +187,13 @@ class arrayImage(object):
                 times = self.arrayDict[tu][self.ocrStringIndex].split()
                 print(times)
                 for t in times:
-                    theTimes.append(re.findall('[0-9]+', t)[0])
+                    try:
+                        theTimes.append(re.findall('[0-9]+', t)[0])
+                    except IndexError as ie:
+                        print ("index out of range")
+                    except Exception as e:
+                        print(e.args)
+                        
             print("The Times:", theTimes)
         if len(dateUnitIndex) > 0:
             for d in dateUnitIndex:
@@ -239,7 +260,7 @@ class arrayImage(object):
         countNumbers = 0
         for n in range(1, 31):
             countNumbers += ocrResult.count(str(n))
-        if countNumbers > 10:
+        if countNumbers > 8:
             return(self.timeUnit)
         for g in allGranularities:
             if g in ocrResult:
@@ -307,5 +328,5 @@ for imageLoc in glob.glob(dirWithArrays+"*.png"):
         im_bw = arrayDaily.cleanImage(img)
         arrayDaily.ocrSegment(im_bw)
         iteration += 1
-        if iteration > 6:
+        if iteration > 0:
             exit()
