@@ -7,7 +7,7 @@ import datetime
 # Generate ruleset for holiday observances on the NYSE
 
 def NYSE_holidays(a=datetime.date.today(), b=datetime.date.today()+datetime.timedelta(days=365)):
-        rs = rrule.rruleset()
+    rs = rrule.rruleset()
 
     # Include all potential holiday observances
     rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth=12, bymonthday=31, byweekday=rrule.FR)) # New Years Day  
@@ -34,7 +34,7 @@ def NYSE_holidays(a=datetime.date.today(), b=datetime.date.today()+datetime.time
 # Generate ruleset for NYSE trading days
 
 def NYSE_tradingdays(a=datetime.date.today(), b=datetime.date.today()+datetime.timedelta(days=365)):
-        rs = rrule.rruleset()
+    rs = rrule.rruleset()
     rs.rrule(rrule.rrule(rrule.DAILY, dtstart=a, until=b))
     
     # Exclude weekends and holidays
@@ -43,15 +43,16 @@ def NYSE_tradingdays(a=datetime.date.today(), b=datetime.date.today()+datetime.t
     
     return rs
 
-# Examples
+if __name__ == '__main__':
+    # Examples
 
-# List all NYSE holiday observances for the coming year
-print "NYSE Holidays\n"
-for dy in NYSE_holidays():
-        print dy.strftime('%b %d %Y')
+    # List all NYSE holiday observances for the coming year
+    print ("NYSE Holidays\n")
+    for dy in NYSE_holidays():
+            print (dy.strftime('%b %d %Y'))
 
-# Count NYSE trading days in next 5 years
-print "\n\nTrading Days\n"
-for yr in range(2015,2020):
+    # Count NYSE trading days in next 5 years
+    print ("\n\nTrading Days\n")
+    for yr in range(2015,2020):
         tdays = len(list(NYSE_tradingdays(datetime.datetime(yr,1,1),datetime.datetime(yr,12,31))))
-    print "{0}  {1}".format(yr,tdays)
+        print ("{0}  {1}".format(yr,tdays))
