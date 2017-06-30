@@ -7,7 +7,7 @@ from tesserocr import PyTessBaseAPI, RIL
 from difflib import SequenceMatcher as SM
 import re
 import datetime
-
+from time import strptime
 from logging import FileHandler
 import logging
 
@@ -35,7 +35,7 @@ class arrayImage(object):
         self.rightMargin = int(round(750*self.scale))
         self.rightMarginWords = int(round(240*self.scale))
         self.imageLoc = ""
-        # whiteList = list(ascii_letters + digits)
+        # whiteList = list(ascii_letters + digits + -)
         self.whiteList = ""
         gen = (i for j in (range(ord('a'), ord('z')+1),
                            range(ord('A'), ord('Z')+1),
@@ -44,11 +44,49 @@ class arrayImage(object):
         for i in gen:
             self.whiteList = self.whiteList+chr(i)
         self.whiteList = self.whiteList+chr(ord('-'))
+
         self.arrayDict = {}   # representation of the array
+
+        # Used to classify array and sub-parts of the array
         self.unclassified = "unclassified"
+        self.dateUnit = "dateUnit"
         self.timeUnit = "timeUnit"
+        self.granularity = "granularity"
+        self.year = "year"
+        self.splitTimeUnit = "splitTimeUnit"
         self.ensembleSegment = "ensembleSegment"
         self.unInteresting = "unInteresting"
+        self.aggregate = "Aggregate"
+        self.transverse = "Transverse"
+        self.empirical = "Empirical"
+        self.longTerm = "Long Term"
+        self.tradingCycle = "Trading Cycle"
+        self.directionChange = "Direction Change"
+        self.panicCycle = "Panic Cycle"
+        self.internalVolatility = "Internal Volatility"
+        self.overnightVolatility = "Overnight Volatility"
+        self.daily = "DAILY FORECAST"
+        self.weekly = "WEEKLY FORECAST"
+        self.monthly = "MONTHLY FORECAST"
+        self.quarterly = "QUARTERLY FORECAST"
+        self.yearly = "YEARLY FORECAST"
+        self.allGranularities = [self.daily, self.weekly, self.monthly,
+                            self.quarterly, self.yearly]
+        self.ensemble = [self.aggregate, self.transverse, self.longTerm,
+                    self.empirical, self.tradingCycle,
+                    self.directionChange, self.panicCycle,
+                    self.panicCycle, self.internalVolatility,
+                    self.overnightVolatility]
+        self.yearIndicator = [ '2015', '2016', '2017', '2018', '2019',
+                            '2020', '2021', '2022', '2023', '2024',
+                            '2025', '2026', '2027', '2028', '2029',
+                            '2030', '2031', '2032', '2033', '2034']
+        self.timePeriods = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+                            '2015', '2016', '2017', '2018', '2019',
+                            '2020', '2021', '2022', '2023', '2024',
+                            '2025', '2026', '2027', '2028', '2029',
+                            '2030', '2031', '2032', '2033', '2034']
 
     def readArray(self, loc, printFile="imgReadIn.png"):
         self.imageLoc = loc
@@ -125,6 +163,8 @@ class arrayImage(object):
             logger.debug(VisualRecord("Tesseract's image ***", timg, "End image"))
             boxes = api.GetComponentImages(RIL.TEXTLINE, True)
             i = 0
+            granularityOfArray=""
+            yearOfArray=0
             for i, (im, box, _, _) in enumerate(boxes):
                 margin = 5
                 api.SetRectangle(box['x'], box['y'],
@@ -137,13 +177,17 @@ class arrayImage(object):
                 # print("confidences: ", api.AllWordConfidences())
                 print(ocrResult)
                 # print (dir(api.GetBoxText(0)))
-                print("==>", self.classifyEntry(ocrResult))
+                print("==>", self.classifyEntry(ocrResult, i))
                 # Still need to split time units and aggregate
                 # when necessary with date
-                classOfLine = self.classifyEntry(ocrResult)
+                classOfLine = self.classifyEntry(ocrResult, i)
+                if self.granularity in classOfLine:
+                    granularityOfArray = classOfLine.split(' ')[1]
+                if self.year in classOfLine:
+                    yearOfArray = int(classOfLine.split(' ')[1])
                 # [classification of line, box info of text, box info, text,
                 # coordinate which we use to find bar if relevant.]
-                self.arrayDict[i] = [classOfLine, api.GetBoxText(0), box,
+                self.arrayDict[i] = [classOfLine, api.GetBoxText(0), box,\
                                      ocrResult, 0]
                 # split, find, etc defined for this.
                 # print(api.GetBoxText(0)) # Letter coordinates
@@ -152,11 +196,14 @@ class arrayImage(object):
                 logger.debug(VisualRecord("ocrResult",
                                           croppedSegment, tailPrint))
                 print(repr(box))
-        self.fixDates()
+        self.fixDates(granularityOfArray, yearOfArray)
         # print(self.arrayDict)
 
-    def fixDates(self):
-        # Heuristics wont work reliably.  Tesseract is too flaky.  
+    def fixDates(self, granularityOfArray, yearOfArray):
+        # TODO: There's an edge case when we are in December
+        # projecting out to the next year.
+        #
+        # TODO: Heuristics wont work reliably.  Tesseract is too flaky.  
         # Create ML model instead. Fine example of replacing code
         # with ML.
         #
@@ -172,89 +219,61 @@ class arrayImage(object):
         # Get the locations of date related data
         timeUnitIndex = []
         dateUnitIndex = []
-        theTimes = []
-        theDates = []
         self.ocrStringIndex = 3
-        tdays = list((NYSE_tradingdays(datetime.datetime(2017, 5,22), datetime.datetime(2017, 5, 22)+datetime.timedelta(days=11))))
-        print (tdays)
         for line in self.arrayDict:
             if self.arrayDict[line][0] == self.dateUnit:
                 dateUnitIndex.append(line)
             if self.arrayDict[line][0] == self.timeUnit:
                 timeUnitIndex.append(line)
+        theTimes = []
+        theDates = []
         if len(timeUnitIndex) > 0:
             for tu in timeUnitIndex:
                 times = self.arrayDict[tu][self.ocrStringIndex].split()
-                print(times)
-                for t in times:
-                    try:
-                        theTimes.append(re.findall('[0-9]+', t)[0])
-                    except IndexError as ie:
-                        print ("index out of range")
-                    except Exception as e:
-                        print(e.args)
-                        
-            print("The Times:", theTimes)
+            for t in times:
+                try:
+                    theTimes.append(int(re.findall('[0-9]+', t)[0]))
+                except IndexError as ie:
+                    print ("index out of range")
+                except Exception as e:
+                    print(e.args)
         if len(dateUnitIndex) > 0:
             for d in dateUnitIndex:
-                theDates = self.arrayDict[d][self.ocrStringIndex].split()
-            print("The Dates:", theDates)
-        # Simple case dates and times match
-        if len(theDates) == len(theTimes):
-            print("NOT TESTED: write code when dates and times match")
-        elif len(theDates) > len(theTimes):
-            print("NOT TESTED: write code when dates > times match")
-        elif len(theDates) < len(theTimes):
-            print("NOT TESTED: write code when number of dates < times ")
-        print(timeUnitIndex)
-        print(dateUnitIndex)
+                for month in self.arrayDict[d][self.ocrStringIndex].split():
+                    theDates.append(strptime(month,'%b').tm_mon)
+        print("granularityOfArray: ", granularityOfArray)
+        # These are the problematic ones for tesseract.
+        if (granularityOfArray in self.daily):
+            fixed = list((NYSE_tradingdays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
+                          datetime.datetime(yearOfArray, theDates[0], theTimes[0])\
+                          + datetime.timedelta(days=11))))
+            print ("days:", fixed)
+        elif (granularityOfArray in self.weekly):
+            fixed = list((NYSE_tradingdays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
+                          datetime.datetime(yearOfArray, theDates[0], theTimes[0])\
+                          + datetime.timedelta(weeks=11))))
+            print ("weeks:", fixed)
+        else:
+            print("other than daily and weekly")
+            fixed = theDates
+        return(fixed)
 
-    def classifyEntry(self, ocrResult):
+    def classifyEntry(self, ocrResult, ocrLineNumber):
         # Simple heuristic based classifier
-        self.unclassified = "unclassified"
-        self.dateUnit = "dateUnit"
-        self.timeUnit = "timeUnit"
-        self.granularity = "grandularity"
         # So we can do i,j for height of bar chart
         # i = one of aggregate..overnightVol.
         # j = one of the time units, possibly a compound one
         # In the case of compound time, date and month are here.
-        self.splitTimeUnit = "splitTimeUnit"
-        self.ensembleSegment = "ensembleSegment"
-        self.unInteresting = "unInteresting"
-        self.aggregate = "Aggregate"
-        self.transverse = "Transverse"
-        self.empirical = "Empirical"
-        self.longTerm = "Long Term"
-        self.tradingCycle = "Trading Cycle"
-        self.directionChange = "Direction Change"
-        self.panicCycle = "Panic Cycle"
-        self.internalVolatility = "Internal Volatility"
-        self.overnightVolatility = "Overnight Volatility"
-        self.daily = "DAILY FORECAST"
-        self.weekly = "WEEKLY FORECAST"
-        self.monthly = "MONTHLY FORECAST"
-        self.quarterly = "QUARTERLY FORECAST"
-        self.yearly = "YEARLY FORECAST"
-        allGranularities = [self.daily, self.weekly, self.monthly,
-                            self.quarterly, self.yearly]
-        ensemble = [self.aggregate, self.transverse, self.longTerm,
-                    self.empirical, self.tradingCycle,
-                    self.directionChange, self.panicCycle,
-                    self.panicCycle, self.internalVolatility,
-                    self.overnightVolatility]
-        self.timePeriods = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-                            '2015', '2016', '2017', '2018', '2019',
-                            '2020', '2021', '2022', '2023', '2024',
-                            '2025', '2026', '2027', '2028', '2029',
-                            '2030', '2031', '2032', '2033', '2034']
+        if ocrLineNumber < 5:  # Near top of array there could be a time stamp
+            for y in self.yearIndicator:
+                if y in  ocrResult:
+                    return(self.year+" "+y)
         countDateUnits = 0
         for t in self.timePeriods:
             countDateUnits += ocrResult.count(t)
         if countDateUnits > 10:
                 return(self.dateUnit)
-        for e in ensemble:
+        for e in self.ensemble:
             if (SM(None, e, ocrResult).ratio() > .8):
                 return(self.ensembleSegment)
         countNumbers = 0
@@ -262,9 +281,9 @@ class arrayImage(object):
             countNumbers += ocrResult.count(str(n))
         if countNumbers > 8:
             return(self.timeUnit)
-        for g in allGranularities:
+        for g in self.allGranularities:
             if g in ocrResult:
-                return(self.granularity)
+                return(self.granularity+" "+g)
         return(self.unclassified)
 
     def extractData(self, sharp, orig):
