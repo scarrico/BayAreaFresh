@@ -6,6 +6,13 @@
 #
 # HINT: If things aren't working right, check ~/.bashrc and ~/.bash_profile
 # Those files had better not be initializing a virtual environment besides pyenv
+# There needs to be a like like:
+#   if which pyenv > /dev/null; then eval "$(pyenv init -)"; fi
+# If not, add it.  If you added that line, then you need to 
+# . ~/bash_profile   # or the file you edited
+# Then re-run this script.  If this script doesn't complete properly, you 
+# probably need to dot execute the bash_profile again and then run the script.
+# Expect to run this script at least twice if not three times until it is complete
 
 #!/usr/bin/env bash
 set -o errexit
