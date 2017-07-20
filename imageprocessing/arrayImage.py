@@ -339,7 +339,7 @@ class arrayImage(object):
 
 
 dirWithArrays = "../../arrays/daily/Dow/array/"
-dirWithArrays = "/Users/ccarrico/Dropbox/Dow/array/"
+dirWithArrays = "../../../Dropbox/Dow/array/"
 iteration = 0
 # BEGIN Set up debugging system
 logger = logging.getLogger("demo")
