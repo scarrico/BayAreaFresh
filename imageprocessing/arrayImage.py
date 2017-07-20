@@ -1,3 +1,12 @@
+# Reads an array and turns it into simple features for machine learning
+# 
+# To make this work you will probably need to install the 
+# following packages:
+#     pip install Pillow
+#     pip install tesserocr
+#     pip install python-dateutil
+#     pip install visual-logging
+
 import cv2
 import glob
 import sys
@@ -330,10 +339,12 @@ class arrayImage(object):
 
 
 dirWithArrays = "../../arrays/daily/Dow/array/"
+dirWithArrays = "/Users/ccarrico/Dropbox/Dow/array/"
 iteration = 0
 # BEGIN Set up debugging system
 logger = logging.getLogger("demo")
 logFile = "../../bin/test"+str(iteration)+".html"
+logFile = "../bin/test"+str(iteration)+".html"
 fh = FileHandler(logFile, mode="w")
 logger.setLevel(logging.DEBUG)
 logger.addHandler(fh)
