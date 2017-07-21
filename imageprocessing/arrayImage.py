@@ -21,7 +21,7 @@ from logging import FileHandler
 import logging
 
 sys.path.insert(0, '../utilities')
-from nyseTradingDays import NYSE_tradingdays, NYSE_holidays
+from tradingDays import tradingDays, holidays
 # vlogging required patch in __init__.py
 # It's probably here:
 # ~/.pyenv/versions/3.6.0/envs/main/lib/python3.6/site-packages/vlogging
@@ -256,12 +256,23 @@ class arrayImage(object):
         print("granularityOfArray: ", granularityOfArray)
         # These are the problematic ones for tesseract.
         if (granularityOfArray in self.daily):
-            fixed = list((NYSE_tradingdays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
+            '''
+            print (list(tradingDays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
+                          datetime.datetime(yearOfArray, theDates[0], theTimes[0])\
+                          + datetime.timedelta(days=0))))
+            fixed = list((tradingDays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
                           datetime.datetime(yearOfArray, theDates[0], theTimes[0])\
                           + datetime.timedelta(days=11))))
-            print ("days:", fixed)
+            '''
+            for i in range(0,20):
+               fixed = list(tradingDays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
+                             datetime.datetime(yearOfArray, theDates[0], theTimes[0])\
+                             + datetime.timedelta(days=i)))
+               if len(fixed) == 12:
+                  break
+            print ("length: ", len(fixed), "days:", fixed, "type:", type(fixed), "theDates", theDates[0])
         elif (granularityOfArray in self.weekly):
-            fixed = list((NYSE_tradingdays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
+            fixed = list((tradingDays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
                           datetime.datetime(yearOfArray, theDates[0], theTimes[0])\
                           + datetime.timedelta(weeks=11))))
             print ("weeks:", fixed)
