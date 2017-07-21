@@ -232,6 +232,11 @@ class arrayImage(object):
         timeUnitIndex = []
         dateUnitIndex = []
         self.ocrStringIndex = 3
+        # used to find number of days in a daily array.  
+        # Needs to be safely more than number of days in array 
+        # to account for weekends and holidays
+        daysRange = 20
+        daysInArray = 12
         for line in self.arrayDict:
             if self.arrayDict[line][0] == self.dateUnit:
                 dateUnitIndex.append(line)
@@ -256,21 +261,12 @@ class arrayImage(object):
         print("granularityOfArray: ", granularityOfArray)
         # These are the problematic ones for tesseract.
         if (granularityOfArray in self.daily):
-            '''
-            print (list(tradingDays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
-                          datetime.datetime(yearOfArray, theDates[0], theTimes[0])\
-                          + datetime.timedelta(days=0))))
-            fixed = list((tradingDays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
-                          datetime.datetime(yearOfArray, theDates[0], theTimes[0])\
-                          + datetime.timedelta(days=11))))
-            '''
-            for i in range(0,20):
+            for i in range(0,daysRange): 
                fixed = list(tradingDays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
                              datetime.datetime(yearOfArray, theDates[0], theTimes[0])\
                              + datetime.timedelta(days=i)))
-               if len(fixed) == 12:
+               if len(fixed) == daysInArray:
                   break
-            print ("length: ", len(fixed), "days:", fixed, "type:", type(fixed), "theDates", theDates[0])
         elif (granularityOfArray in self.weekly):
             fixed = list((tradingDays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
                           datetime.datetime(yearOfArray, theDates[0], theTimes[0])\
