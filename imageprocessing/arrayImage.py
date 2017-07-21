@@ -23,7 +23,10 @@ import logging
 sys.path.insert(0, '../utilities')
 from nyseTradingDays import NYSE_tradingdays, NYSE_holidays
 # vlogging required patch in __init__.py
+# It's probably here:
+# ~/.pyenv/versions/3.6.0/envs/main/lib/python3.6/site-packages/vlogging
 # Added .decode() to line with base64 print
+#     "data": base64.b64encode(data).decode(),
 # Left message on github.
 from vlogging import VisualRecord
 
