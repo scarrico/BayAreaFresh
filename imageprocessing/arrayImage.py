@@ -1,6 +1,6 @@
 # Reads an array and turns it into simple features for machine learning
-# 
-# To make this work you will probably need to install the 
+#
+# To make this work you will probably need to install the
 # following packages:
 #     pip install Pillow
 #     pip install tesserocr
@@ -19,9 +19,10 @@ import datetime
 from time import strptime
 from logging import FileHandler
 import logging
-
+from collections import deque
 sys.path.insert(0, '../utilities')
 from tradingDays import tradingDays, holidays
+
 # vlogging required patch in __init__.py
 # It's probably here:
 # ~/.pyenv/versions/3.6.0/envs/main/lib/python3.6/site-packages/vlogging
@@ -57,8 +58,14 @@ class arrayImage(object):
             self.whiteList = self.whiteList+chr(i)
         self.whiteList = self.whiteList+chr(ord('-'))
 
+        # [classification of line, box info of text, box info, text,
+        # coordinate which we use to find bar if relevant.]
         self.arrayDict = {}   # representation of the array
-
+        self.adClassOfLinei = 0
+        self.adBoxTexti = 1
+        self.adBoxi = 2
+        self.adTexti = 3
+        self.adCoordinatei = 4
         # Used to classify array and sub-parts of the array
         self.unclassified = "unclassified"
         self.dateUnit = "dateUnit"
@@ -66,6 +73,7 @@ class arrayImage(object):
         self.granularity = "granularity"
         self.year = "year"
         self.splitTimeUnit = "splitTimeUnit"
+        # One of Aggregate, Transverse..Overnight Volatility
         self.ensembleSegment = "ensembleSegment"
         self.unInteresting = "unInteresting"
         self.aggregate = "Aggregate"
@@ -83,16 +91,16 @@ class arrayImage(object):
         self.quarterly = "QUARTERLY FORECAST"
         self.yearly = "YEARLY FORECAST"
         self.allGranularities = [self.daily, self.weekly, self.monthly,
-                            self.quarterly, self.yearly]
+                                 self.quarterly, self.yearly]
         self.ensemble = [self.aggregate, self.transverse, self.longTerm,
-                    self.empirical, self.tradingCycle,
-                    self.directionChange, self.panicCycle,
-                    self.panicCycle, self.internalVolatility,
-                    self.overnightVolatility]
-        self.yearIndicator = [ '2015', '2016', '2017', '2018', '2019',
-                            '2020', '2021', '2022', '2023', '2024',
-                            '2025', '2026', '2027', '2028', '2029',
-                            '2030', '2031', '2032', '2033', '2034']
+                         self.empirical, self.tradingCycle,
+                         self.directionChange, self.panicCycle,
+                         self.panicCycle, self.internalVolatility,
+                         self.overnightVolatility]
+        self.yearIndicator = ['2015', '2016', '2017', '2018', '2019',
+                              '2020', '2021', '2022', '2023', '2024',
+                              '2025', '2026', '2027', '2028', '2029',
+                              '2030', '2031', '2032', '2033', '2034']
         self.timePeriods = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                             'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
                             '2015', '2016', '2017', '2018', '2019',
@@ -158,10 +166,9 @@ class arrayImage(object):
 
     def ocrSegment(self, sharp):
         print("input image sharp shape:", sharp.shape)
-        maxY = sharp.shape[0] # Rows
-        maxX = sharp.shape[1] # Columns
         # Given a (hopefully) sharpened image, ocr the segment
-        img = Image.fromarray(sharp)
+        logger.debug(VisualRecord("sharp image ***", sharp, "End image"))
+        img = Image.fromarray(sharp, mode='L')
         # logger.debug(VisualRecord("Tesseract Input", img, "End image"))
         # Read off the labels one at a time.  Need a margin
         # since otherwise the cropping is too close for tesseract.
@@ -172,11 +179,12 @@ class arrayImage(object):
             api.SetImage(img)
 
             timg = api.GetThresholdedImage()
-            logger.debug(VisualRecord("Tesseract's image ***", timg, "End image"))
+            logger.debug(VisualRecord("Tesseract's image ***", timg,
+                         "End image"))
             boxes = api.GetComponentImages(RIL.TEXTLINE, True)
             i = 0
-            granularityOfArray=""
-            yearOfArray=0
+            granularityOfArray = ""
+            yearOfArray = 0
             for i, (im, box, _, _) in enumerate(boxes):
                 margin = 5
                 api.SetRectangle(box['x'], box['y'],
@@ -199,7 +207,7 @@ class arrayImage(object):
                     yearOfArray = int(classOfLine.split(' ')[1])
                 # [classification of line, box info of text, box info, text,
                 # coordinate which we use to find bar if relevant.]
-                self.arrayDict[i] = [classOfLine, api.GetBoxText(0), box,\
+                self.arrayDict[i] = [classOfLine, api.GetBoxText(0), box,
                                      ocrResult, 0]
                 # split, find, etc defined for this.
                 # print(api.GetBoxText(0)) # Letter coordinates
@@ -208,18 +216,97 @@ class arrayImage(object):
                 logger.debug(VisualRecord("ocrResult",
                                           croppedSegment, tailPrint))
                 print(repr(box))
-        self.fixDates(granularityOfArray, yearOfArray)
+        fixedDates = self.fixDates(granularityOfArray, yearOfArray)
+        self.barHeight(img)
         # print(self.arrayDict)
+
+    def barHeight(self, pilimg):
+        # Must use PIL image, raw image pixels don't match OCR or
+        # (0,0) is upper left corner
+        maxCoord = 1000000000  # largest image we can imagine getting in pixels
+        leftMostX = maxCoord  # Number approaches 0
+        topMostY = maxCoord  # Number approaches 0
+        bottomMostY = 0  # Number approaches 0
+        monthXcoord = []
+        ensembleYcoord = {}
+        for line in self.arrayDict:
+            # Need this for where to start reading pixels for daily arrays
+            if self.arrayDict[line][self.adClassOfLinei] == self.timeUnit:
+                if (bottomMostY == 0)\
+                    or (bottomMostY >
+                        (self.arrayDict[line][self.adBoxi]['y'] -
+                         self.arrayDict[line][self.adBoxi]['h'])):
+                    bottomMostY = self.arrayDict[line][self.adBoxi]['y'] -\
+                                self.arrayDict[line][self.adBoxi]['h']
+            if self.arrayDict[line][self.adClassOfLinei] == self.dateUnit:
+                # Get the X coordinate for the middle letter of each month
+                # along the bottom of the array.  Store in list: monthXcoord
+                months = self.arrayDict[line][self.adTexti].split(' ')
+                # Months are 3 character abbreviations
+                # From the middle looking up the image pixels we
+                # should be able to see where the bars are.
+                # Then we match on the individual letters with their
+                # coordinates that OCR gives us.
+                middleMonthLetters = deque([m[1] for m in months])
+                positionsOfLettersQue = deque(self.arrayDict[line][self.adBoxTexti].split('\n'))
+                while len(middleMonthLetters) > 0:
+                    letter = middleMonthLetters.popleft()
+                    while len(positionsOfLettersQue) > 0:
+                        letterBox = positionsOfLettersQue.popleft()
+                        if letter in letterBox:
+                            # x is first coord
+                            monthXcoord.append(int(letterBox.split(' ')[1]))
+                            break
+                if self.arrayDict[line][self.adBoxi]['x'] < leftMostX:
+                    leftMostX = self.arrayDict[line][self.adBoxi]['x']
+                if self.arrayDict[line][self.adBoxi]['y'] < topMostY:
+                    topMostY = self.arrayDict[line][self.adBoxi]['y']
+                print("monthXcoord:", monthXcoord)
+                print(pilimg.getpixel((self.arrayDict[line][self.adBoxi]['x'],
+                      self.arrayDict[line][self.adBoxi]['y'])))
+                print("topMostY: ", topMostY)
+                print("dateTimeUnit:", self.arrayDict[line])
+                # The higher you go in the image the lower the Y coordinate
+                if (bottomMostY == 0)\
+                    or (bottomMostY >
+                        (self.arrayDict[line][self.adBoxi]['y'] -
+                         self.arrayDict[line][self.adBoxi]['h'])):
+                    bottomMostY = self.arrayDict[line][self.adBoxi]['y'] -\
+                                  self.arrayDict[line][self.adBoxi]['h']
+                subImg = pilimg.crop((self.arrayDict[line][self.adBoxi]['x'],
+                                      topMostY,
+                                      self.arrayDict[line][self.adBoxi]['x']
+                                      + 100,
+                                      self.arrayDict[line][self.adBoxi]['y']))
+                # subImg.show()
+            if self.arrayDict[line][self.adClassOfLinei]\
+               == self.ensembleSegment:
+                ensembleYcoord[int(self.arrayDict[line][self.adBoxi]['y'])] = \
+                               self.arrayDict[line][self.adTexti].strip()
+                if self.arrayDict[line][self.adBoxi]['x'] < leftMostX:
+                    leftMostX = self.arrayDict[line][self.adBoxi]['x']
+                if self.arrayDict[line][self.adBoxi]['y'] < topMostY:
+                    topMostY = self.arrayDict[line][self.adBoxi]['y']
+                print("ensembleSegment:", self.arrayDict[line])
+        print("bottomMostY: ", bottomMostY)
+        print("ensembleYcoord:", ensembleYcoord)
+        for monthX in monthXcoord:
+            pixelList = []
+            for p in range(topMostY, bottomMostY):
+                pixelList.append(pilimg.getpixel((monthX, p)))
+            print(pixelList)
+            subImg = pilimg.crop((monthX-10, topMostY, monthX+50, bottomMostY))
+            # subImg.show()
 
     def fixDates(self, granularityOfArray, yearOfArray):
         # TODO: There's an edge case when we are in December
         # projecting out to the next year.
         #
-        # TODO: Heuristics wont work reliably.  Tesseract is too flaky.  
+        # TODO: Heuristics wont work reliably.  Tesseract is too flaky.
         # Create ML model instead. Fine example of replacing code
         # with ML.
         #
-        # For now to test this out we will just take the first 
+        # For now to test this out we will just take the first
         # date month pair and then count out the number of slots
         # we find using the nyse trading days gist.
         #
@@ -232,8 +319,8 @@ class arrayImage(object):
         timeUnitIndex = []
         dateUnitIndex = []
         self.ocrStringIndex = 3
-        # used to find number of days in a daily array.  
-        # Needs to be safely more than number of days in array 
+        # used to find number of days in a daily array.
+        # Needs to be safely more than number of days in array
         # to account for weekends and holidays
         daysRange = 20
         daysInArray = 12
@@ -251,27 +338,33 @@ class arrayImage(object):
                 try:
                     theTimes.append(int(re.findall('[0-9]+', t)[0]))
                 except IndexError as ie:
-                    print ("index out of range")
+                    print("index out of range")
                 except Exception as e:
                     print(e.args)
         if len(dateUnitIndex) > 0:
             for d in dateUnitIndex:
                 for month in self.arrayDict[d][self.ocrStringIndex].split():
-                    theDates.append(strptime(month,'%b').tm_mon)
+                    theDates.append(strptime(month, '%b').tm_mon)
         print("granularityOfArray: ", granularityOfArray)
         # These are the problematic ones for tesseract.
         if (granularityOfArray in self.daily):
-            for i in range(0,daysRange): 
-               fixed = list(tradingDays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
-                             datetime.datetime(yearOfArray, theDates[0], theTimes[0])\
-                             + datetime.timedelta(days=i)))
-               if len(fixed) == daysInArray:
-                  break
+            for i in range(0, daysRange):
+                fixed = list(tradingDays(datetime.datetime(yearOfArray,
+                                                           theDates[0],
+                                                           theTimes[0]),
+                                         datetime.datetime(yearOfArray,
+                                         theDates[0], theTimes[0])
+                                         + datetime.timedelta(days=i)))
+                if len(fixed) == daysInArray:
+                    break
         elif (granularityOfArray in self.weekly):
-            fixed = list((tradingDays(datetime.datetime(yearOfArray, theDates[0], theTimes[0]), \
-                          datetime.datetime(yearOfArray, theDates[0], theTimes[0])\
-                          + datetime.timedelta(weeks=11))))
-            print ("weeks:", fixed)
+            fixed = list((tradingDays(datetime.datetime(yearOfArray,
+                                                        theDates[0],
+                                                        theTimes[0]),
+                                      datetime.datetime(yearOfArray,
+                                      theDates[0], theTimes[0]) +
+                                      datetime.timedelta(weeks=11))))
+            print("weeks:", fixed)
         else:
             print("other than daily and weekly")
             fixed = theDates
@@ -285,7 +378,7 @@ class arrayImage(object):
         # In the case of compound time, date and month are here.
         if ocrLineNumber < 5:  # Near top of array there could be a time stamp
             for y in self.yearIndicator:
-                if y in  ocrResult:
+                if y in ocrResult:
                     return(self.year+" "+y)
         countDateUnits = 0
         for t in self.timePeriods:
